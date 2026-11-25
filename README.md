@@ -1,36 +1,42 @@
 # Team 9 HR agent prototype
 
-This prototype runs two LangGraph steps. It searches the sample HR policies, then returns the matching text with a file-and-section citation. It uses a fixed answer template and does not call an LLM.
+This LangGraph app searches sample HR policies and sends a matching section to DeepSeek for a short answer. The app attaches the source citation after generation. If retrieval finds no match, it returns a fixed fallback without calling the model.
 
-## Run
+## Setup
 
 Requires Python 3.11 or newer and `uv`.
 
 ```sh
 uv sync --extra dev
+cp .env.example .env
+```
+
+Add your DeepSeek API key to `.env` as `DEEPSEEK_API_KEY=...`. The file is ignored by Git.
+
+## Run
+
+```sh
 uv run pytest
 uv run team9-agent "How many paid days off do I get for my wedding?"
 ```
 
-Try an unsupported topic to see the fallback:
+Use `--mock` to test retrieval without calling DeepSeek:
 
 ```sh
-uv run team9-agent "What is the policy for payroll corrections?"
+uv run team9-agent --mock "How many paid days off do I get for my wedding?"
 ```
 
 ## Workflow
 
 ```text
-Question -> retrieve matching document section -> return answer with source
-                                      └-> no match: say the documents do not cover it
+Question -> keyword retrieval -> DeepSeek answer -> source citation
+                   └-> no match: fixed fallback, no model request
 ```
 
-Search compares words in the question with each document section. It returns a match only when at least two words overlap, then cites that section. This simple method can miss synonyms or return a weak match. The answer uses a fixed template, not an LLM.
+Search compares question words with each document section and requires at least two matches. It can miss synonyms or return a weak match. The citation comes from the retrieved file and section, not from the model.
 
-## Sample data
+## Sample data and limits
 
-`data/hr/` contains fictional examples for local testing. They are not real policies, legal guidance, or employee records. Replace them with professor-approved documents before relying on answers.
+`data/hr/` contains fictional examples for local testing. They do not describe a real employer or provide legal guidance. Replace them with professor-approved documents before relying on answers.
 
-## Scope
-
-This is a local workflow prototype, not a deployed service or a Discord integration. It has no real employee-data access, authentication, ticketing, or production retrieval database. Keep secrets and real employee data out of Git.
+This is a local prototype, not a deployed service or Discord integration. It has no authentication, ticketing, personal employee data, or production retrieval database. Questions and retrieved policy text are sent to DeepSeek for matched queries. Do not use confidential HR data in this prototype.
