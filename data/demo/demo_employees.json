@@ -1,0 +1,9 @@
+{
+  "notice": "Fictional test records. Never use this file for real employee data.",
+  "employees": [
+    {
+      "employee_id": "TEST-001",
+      "annual_leave_days_remaining": 12
+    }
+  ]
+}

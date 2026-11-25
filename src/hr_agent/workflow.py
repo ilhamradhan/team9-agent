@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 from collections.abc import Callable
@@ -10,6 +11,7 @@ from langgraph.graph import END, START, StateGraph
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DOCUMENTS_DIR = PROJECT_ROOT / "data" / "hr"
+DEMO_EMPLOYEES_FILE = PROJECT_ROOT / "data" / "demo" / "demo_employees.json"
 STOP_WORDS = {
     "a", "an", "and", "are", "do", "does", "for", "from", "get", "how",
     "i", "in", "is", "it", "me", "of", "on", "the", "to", "what", "when",
@@ -25,6 +27,8 @@ class RetrievedSection(TypedDict):
 
 class HRState(TypedDict, total=False):
     question: str
+    employee_id: str
+    intent: str
     retrieved: list[RetrievedSection]
     answer: str
     sources: list[str]
@@ -103,6 +107,37 @@ def _deepseek_answer(question: str, sections: list[RetrievedSection]) -> str:
 Answerer = Callable[[str, list[RetrievedSection]], str]
 
 
+def _classify_question(state: HRState) -> dict[str, str]:
+    words = set(re.findall(r"[a-z0-9]+", state.get("question", "").lower()))
+    personal_terms = {"vacation", "leave", "balance", "remaining", "left"}
+    personal = bool(words & personal_terms) and bool(words & {"my", "mine", "i"})
+    return {"intent": "personal" if personal else "general"}
+
+
+def _lookup_demo_employee(state: HRState) -> dict[str, object]:
+    employee_id = state.get("employee_id", "").strip()
+    if not employee_id:
+        return {
+            "answer": "Please provide your employee ID to look up your leave balance.",
+            "sources": [],
+        }
+
+    data = json.loads(DEMO_EMPLOYEES_FILE.read_text(encoding="utf-8"))
+    employee = next(
+        (record for record in data["employees"] if record["employee_id"] == employee_id),
+        None,
+    )
+    if employee is None:
+        return {"answer": "No matching employee ID exists in the demo records.", "sources": []}
+
+    balance = employee["annual_leave_days_remaining"]
+    source = f"demo_employees.json#{employee_id}"
+    return {
+        "answer": f"Your remaining annual leave balance is {balance} days. [Source: {source}]",
+        "sources": [source],
+    }
+
+
 def build_graph(
     documents_dir: Path = DEFAULT_DOCUMENTS_DIR,
     answerer: Answerer | None = None,
@@ -134,9 +169,20 @@ def build_graph(
         }
 
     graph = StateGraph(HRState)
+    graph.add_node("classify_question", _classify_question)
+    graph.add_node("lookup_personal_employee", _lookup_demo_employee)
     graph.add_node("retrieve_hr_documents", retrieve)
     graph.add_node("generate_answer", generate)
-    graph.add_edge(START, "retrieve_hr_documents")
+    graph.add_edge(START, "classify_question")
+    graph.add_conditional_edges(
+        "classify_question",
+        lambda state: state.get("intent", "general"),
+        {
+            "personal": "lookup_personal_employee",
+            "general": "retrieve_hr_documents",
+        },
+    )
+    graph.add_edge("lookup_personal_employee", END)
     graph.add_edge("retrieve_hr_documents", "generate_answer")
     graph.add_edge("generate_answer", END)
     return graph.compile()
