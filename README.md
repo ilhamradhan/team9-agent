@@ -1,6 +1,6 @@
 # Team 9 HR agent prototype
 
-A small LangGraph workflow that retrieves a matching section from fictional HR documents and returns it with a source citation. The answer step is deterministic for now. It does not call an LLM.
+This prototype runs two LangGraph steps. It searches the sample HR policies, then returns the matching text with a file-and-section citation. It uses a fixed answer template and does not call an LLM.
 
 ## Run
 
@@ -25,7 +25,7 @@ Question -> retrieve matching document section -> return answer with source
                                       └-> no match: say the documents do not cover it
 ```
 
-The prototype uses simple keyword overlap because the sample corpus is tiny. It cites the filename and section, and abstains when it cannot find a sufficiently strong match. Replace the deterministic answer step with a model only after the team chooses an inference provider.
+Search compares words in the question with each document section. It returns a match only when at least two words overlap, then cites that section. This simple method can miss synonyms or return a weak match. The answer uses a fixed template, not an LLM.
 
 ## Sample data
 
